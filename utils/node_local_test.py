@@ -457,13 +457,21 @@ def get_base_env(clean=False):
 
 
 def check_memcheck_build(conf):
-    """Fail early if the daos binary is not valgrind-tagged for a memcheck run."""
+    """Fail early if Go binaries are not valgrind-tagged for a memcheck run."""
     daos_bin = join(conf['PREFIX'], 'bin', 'daos')
     with open(daos_bin, 'rb') as fd:
         if b'runtime.valgrindRegisterStack' not in fd.read():
             raise NLTestFail(
                 f'{daos_bin} is not built with the Go "valgrind" tag (needs '
                 'Go 1.25+ and BUILD_GO_VALGRIND=1), to run under memcheck.')
+
+    control_so = join(conf['PREFIX'], 'lib64', 'libdaos_control.so')
+    if os.path.exists(control_so):
+        with open(control_so, 'rb') as fd:
+            if b'runtime.valgrindRegisterStack' not in fd.read():
+                raise NLTestFail(
+                    f'{control_so} is not built with the Go "valgrind" tag '
+                    '(needs BUILD_GO_VALGRIND=1), to run under memcheck.')
 
 
 class DaosPool():
@@ -725,8 +733,12 @@ class DaosServer():
             suppression_file = join('src', 'cart', 'utils', 'memcheck-cart.supp')
             if not os.path.exists(suppression_file):
                 suppression_file = join(self.conf['PREFIX'], 'etc', 'memcheck-cart.supp')
-
             valgrind_args.append(f'--suppressions={os.path.realpath(suppression_file)}')
+
+            go_suppression_file = join('src', 'cart', 'utils', 'memcheck-go.supp')
+            if not os.path.exists(go_suppression_file):
+                go_suppression_file = join(self.conf['PREFIX'], 'etc', 'memcheck-go.supp')
+            valgrind_args.append(f'--suppressions={os.path.realpath(go_suppression_file)}')
 
             self._io_server_dir = tempfile.TemporaryDirectory(prefix='dnt_io_')
 
@@ -1309,6 +1321,12 @@ class ValgrindHelper():
             cmd.append(f'--suppressions={src_suppression_file}')
         else:
             cmd.append(f"--suppressions={join(self.conf['PREFIX'], 'etc', 'memcheck-cart.supp')}")
+
+        src_go_suppression_file = join('src', 'cart', 'utils', 'memcheck-go.supp')
+        if os.path.exists(src_go_suppression_file):
+            cmd.append(f'--suppressions={src_go_suppression_file}')
+        else:
+            cmd.append(f"--suppressions={join(self.conf['PREFIX'], 'etc', 'memcheck-go.supp')}")
 
         return cmd
 

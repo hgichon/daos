@@ -476,7 +476,7 @@ void rpm_test_post(String stageName, String node) {
        script: 'hostname; ssh -i ci_key jenkins@' + firstNode +
                ' ls -ltar /tmp; mkdir -p "' +  env.STAGE_NAME + '/" && ' +
                'scp -i ci_key jenkins@' + firstNode +
-               ':/tmp/{{suite_dmg,daos_{server_helper,{control,agent}}}.log,daos_server.log.*} "' +
+               ':/tmp/{{libdaos_control,daos_{server_helper,{control,agent}}}.log,daos_server.log.*} "' +
                stageName + '/"'
     archiveArtifacts artifacts: env.STAGE_NAME + '/**'
     job_status_update()
@@ -1125,6 +1125,10 @@ pipeline {
                         label cachedCommitPragma(pragma: 'VM1-label', def_val: params.CI_UNIT_VM1_LABEL)
                     }
                     steps {
+                        // Memcheck the valgrind-tagged build so the Go runtime's
+                        // valgrind client requests suppress the resident-runtime
+                        // noise from libdaos_control.so, like the NLT stage does.
+                        unstash 'opt-daos-valgrind'
                         job_step_update(
                             unitTest(timeout_time: 160,
                                      unstash_opt: true,
@@ -1151,6 +1155,8 @@ pipeline {
                         label params.CI_UNIT_VM1_NVME_LABEL
                     }
                     steps {
+                        // Memcheck the valgrind-tagged build (see 'Unit Test with memcheck').
+                        unstash 'opt-daos-valgrind'
                         job_step_update(
                             unitTest(timeout_time: 180,
                                      unstash_opt: true,
