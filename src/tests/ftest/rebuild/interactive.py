@@ -48,30 +48,36 @@ class RbldInteractive(TestWithServers):
         job_manager = get_job_manager(self, subprocess=False)
         ior = get_ior(
             self, job_manager, self.hostlist_clients, self.workdir, None, namespace='/run/ior/*')
-        ior.manager.job.update_params(flags=ior_flags_write, dfs_oclass=cont_ior.oclass.value)
-        ior.run(cont_ior.pool, cont_ior, None, ior_ppn, display_space=False)
+        ior.manager.job.update_params(
+            flags=ior_flags_write, dfs_oclass=cont_ior.oclass.value,
+            dfs_pool=pool.identifier, dfs_cont=cont_ior.identifier)
+        ior.run(ppn=ior_ppn, display_space=False)
 
         self.__run_rebuild_interactive(
-            pool, cont_ior, ior,
+            pool, ior,
             num_ranks_to_exclude=1,
             exclude_method='dmg pool exclude',
-            reint_method='dmg pool reintegrate')
+            reint_method='dmg pool reintegrate',
+            stop_method='dmg pool rebuild stop',
+            start_method='dmg pool rebuild start')
 
         self.__run_rebuild_interactive(
-            pool, cont_ior, ior,
+            pool, ior,
             num_ranks_to_exclude=1,
             exclude_method='dmg system exclude',
-            reint_method='dmg system reintegrate')
+            reint_method='dmg system reintegrate',
+            stop_method='dmg system rebuild stop',
+            start_method='dmg system rebuild start')
 
         self.log_step('Test Passed')
 
-    def __run_rebuild_interactive(self, pool, cont_ior, ior,
-                                  num_ranks_to_exclude, exclude_method, reint_method):
+    def __run_rebuild_interactive(self, pool, ior,
+                                  num_ranks_to_exclude, exclude_method, reint_method,
+                                  stop_method, start_method):
         """Run interactive rebuild test sequence.
 
         Args:
             pool (TestPool): pool to use
-            cont_ior (TestContainer): container used for IOR
             iort (Ior): the Ior object
             num_ranks_to_exclude (int): number of ranks to exclude/reintegrate
             exclude_method (str): method to exclude ranks. Must be in
@@ -80,10 +86,15 @@ class RbldInteractive(TestWithServers):
             reint_method (str): method to reintegrate ranks. Must be in
                 - 'dmg pool reintegrate'
                 - 'dmg system reintegrate'
+            stop_method (str): method to stop rebuild with. Must be in
+                - 'dmg pool rebuild stop'
+                - 'dmg system rebuild stop'
+            start_method (str): method to start rebuild with. Must be in
+                - 'dmg pool rebuild start'
+                - 'dmg system rebuild start'
         """
 
         ior_flags_read = self.params.get('flags_read', '/run/ior/*')
-        ior_ppn = self.params.get('ppn', '/run/ior/*')
 
         self.log_step('Verify pool state before rebuild')
         self.__verify_pool_query(
@@ -102,13 +113,19 @@ class RbldInteractive(TestWithServers):
         self.log_step(f'{exclude_method} - Wait for rebuild to start')
         pool.wait_for_rebuild_to_start(interval=1)
 
-        self.log_step(f'{exclude_method} - Manually stop rebuild')
-        for i in range(3):
+        self.log_step(f'{exclude_method} - Manually stop rebuild with {stop_method}')
+        max_tries = 3
+        for i in range(max_tries):
             try:
-                pool.rebuild_stop()
+                if stop_method == 'dmg pool rebuild stop':
+                    pool.rebuild_stop()
+                elif stop_method == 'dmg system rebuild stop':
+                    pool.dmg.system_rebuild_stop()
+                else:
+                    self.fail(f'Unsupported stop_method: {stop_method}')
                 break
             except CommandFailure as error:
-                if i == 2 or 'DER_NONEXIST' not in str(error):
+                if not i < max_tries or 'DER_NONEXIST' not in str(error):
                     raise
                 self.log.info('Assuming rebuild is not started yet. Retrying in 3 seconds...')
                 time.sleep(3)
@@ -123,10 +140,15 @@ class RbldInteractive(TestWithServers):
 
         self.log_step(f'{exclude_method} - Verify IOR after rebuild stopped')
         ior.manager.job.update_params(flags=ior_flags_read)
-        ior.run(cont_ior.pool, cont_ior, None, ior_ppn, display_space=False)
+        ior.run(display_space=False)
 
-        self.log_step(f'{exclude_method} - Manually start rebuild')
-        pool.rebuild_start()
+        self.log_step(f'{exclude_method} - Manually start rebuild with {start_method}')
+        if start_method == 'dmg pool rebuild start':
+            pool.rebuild_start()
+        elif start_method == 'dmg system rebuild start':
+            pool.dmg.system_rebuild_start()
+        else:
+            self.fail(f'Unsupported start_method: {start_method}')
 
         self.log_step(f'{exclude_method} - Wait for rebuild to start')
         pool.wait_for_rebuild_to_start(interval=1)
@@ -141,7 +163,7 @@ class RbldInteractive(TestWithServers):
 
         self.log_step(f'{exclude_method} - Verify IOR after rebuild completed')
         ior.manager.job.update_params(flags=ior_flags_read)
-        ior.run(cont_ior.pool, cont_ior, None, ior_ppn, display_space=False)
+        ior.run(display_space=False)
 
         if exclude_method == 'dmg system exclude':
             self.log_step(f'{exclude_method} - Clear exclusion of ranks')
@@ -160,13 +182,19 @@ class RbldInteractive(TestWithServers):
         self.log_step(f'{reint_method} - Wait for rebuild to start')
         pool.wait_for_rebuild_to_start(interval=1)
 
-        self.log_step(f'{reint_method} - Manually stop rebuild')
-        for i in range(3):
+        self.log_step(f'{reint_method} - Manually stop rebuild with {stop_method}')
+        max_tries = 3
+        for i in range(max_tries):
             try:
-                pool.rebuild_stop()
+                if stop_method == 'dmg pool rebuild stop':
+                    pool.rebuild_stop()
+                elif stop_method == 'dmg system rebuild stop':
+                    pool.dmg.system_rebuild_stop()
+                else:
+                    self.fail(f'Unsupported stop_method: {stop_method}')
                 break
             except CommandFailure as error:
-                if i == 2 or 'DER_NONEXIST' not in str(error):
+                if not i < max_tries or 'DER_NONEXIST' not in str(error):
                     raise
                 self.log.info('Assuming rebuild is not started yet. Retrying in 3 seconds...')
                 time.sleep(3)
@@ -181,10 +209,15 @@ class RbldInteractive(TestWithServers):
 
         self.log_step(f'{reint_method} - Verify IOR after rebuild stopped')
         ior.manager.job.update_params(flags=ior_flags_read)
-        ior.run(cont_ior.pool, cont_ior, None, ior_ppn, display_space=False)
+        ior.run(display_space=False)
 
-        self.log_step(f'{reint_method} - Manually start rebuild')
-        pool.rebuild_start()
+        self.log_step(f'{reint_method} - Manually start rebuild with {start_method}')
+        if start_method == 'dmg pool rebuild start':
+            pool.rebuild_start()
+        elif start_method == 'dmg system rebuild start':
+            pool.dmg.system_rebuild_start()
+        else:
+            self.fail(f'Unsupported start_method: {start_method}')
 
         self.log_step(f'{reint_method} - Wait for rebuild to start')
         pool.wait_for_rebuild_to_start(interval=1)
@@ -198,7 +231,7 @@ class RbldInteractive(TestWithServers):
 
         self.log_step(f'{reint_method} - Verify IOR after rebuild completed')
         ior.manager.job.update_params(flags=ior_flags_read)
-        ior.run(cont_ior.pool, cont_ior, None, ior_ppn, display_space=False)
+        ior.run(display_space=False)
 
     def __verify_pool_query(self, pool, rebuild_status, rebuild_state, disabled_ranks):
         """Verify pool query.
