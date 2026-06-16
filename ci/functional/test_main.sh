@@ -27,11 +27,21 @@ first_node=${NODELIST%%,*}
 hardware_ok=false
 
 cluster_reboot () {
-    # shellcheck disable=SC2029,SC2089
-    clush -B -S -o '-i ci_key' -l root -w "${tnodes}" reboot || true
+    if [ -z "$tnodes" ]; then
+        echo "ERROR: cluster_reboot called without reboot targets"
+        return 1
+    fi
+
+    if [ "$tnodes" = "localhost" ]; then
+        echo "WARNING: localhost is the only reboot target; skipping reboot"
+        return 0
+    fi
 
     # shellcheck disable=SC2029,SC2089
-    poll_cmd=( clush -B -S -o "-i ci_key" -l root -w "${tnodes}" )
+    clush -B -S -o '-i ci_key' -l root -w "$tnodes" reboot || true
+
+    # shellcheck disable=SC2029,SC2089
+    poll_cmd=( clush -B -S -o "-i ci_key" -l root -w "$tnodes" )
     poll_cmd+=( cat /etc/os-release )
     # 20 minutes, HPE systems may take more than 15 minutes.
     reboot_timeout=1200
@@ -47,6 +57,11 @@ cluster_reboot () {
 }
 
 test_cluster() {
+    local rc=0
+    local log_file
+
+    log_file="$(mktemp)"
+
     # Test that all nodes in the cluster are healthy
     clush -B -S -o '-i ci_key' -l root -w "${tnodes}"   \
         "OPERATIONS_EMAIL=${OPERATIONS_EMAIL:-}         \
