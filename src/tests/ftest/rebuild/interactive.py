@@ -3,13 +3,15 @@
 
   SPDX-License-Identifier: BSD-2-Clause-Patent
 """
+import threading
 import time
 from functools import partial
+from multiprocessing import Queue
 
 from apricot import TestWithServers
 from data_utils import assert_val_in_list
 from exception_utils import CommandFailure
-from ior_utils import get_ior
+from ior_utils import get_ior, thread_run_ior
 from job_manager_utils import get_job_manager
 
 
@@ -44,7 +46,7 @@ class RbldInteractive(TestWithServers):
             server_count, engines_per_host, targets_per_engine)
 
         self.log_step('Create container and run IOR')
-        cont1 = self.get_container(pool1, namespace='/run/cont_ior/*')
+        cont1 = self.get_container(pool1)
         ior_flags_write = self.params.get('flags_write', '/run/ior/*')
         ior_flags_read = self.params.get('flags_read', '/run/ior/*')
         ior_ppn = self.params.get('ppn', '/run/ior/*')
@@ -60,6 +62,30 @@ class RbldInteractive(TestWithServers):
         # Update ior with read flags for verification later
         ior1.manager.job.update_params(flags=ior_flags_read)
 
+        # Launch background IOR
+        cont_background = self.get_container(pool1)
+        thread_queue = Queue()
+        ior_kwargs = {
+            "thread_queue": thread_queue,
+            "job_id": 0,
+            "test": self,
+            "manager": job_manager,
+            "log": "ior_thread.log",
+            "hosts": self.hostlist_clients,
+            "path": self.workdir,
+            "slots": None,
+            "pool": pool1,
+            "container": cont_background,
+            "processes": self.params.get("np", "/run/ior_background/*"),
+            "ppn": self.params.get("ppn", "/ior_background/*"),
+            "display_space": False,
+            "namespace": "/run/ior_background/*"
+        }
+        ior_thread = threading.Thread(target=thread_run_ior, kwargs=ior_kwargs)
+        ior_thread.start()
+        if not ior_thread.is_alive():
+            self.fail("Background IOR thread failed to start")
+
         self.__run_rebuild_interactive(
             [pool1], [ior1],
             num_ranks_to_exclude=1,
@@ -68,11 +94,26 @@ class RbldInteractive(TestWithServers):
             stop_method='dmg pool rebuild stop',
             start_method='dmg pool rebuild start')
 
+        ior_thread.join()
+        if thread_queue.empty():
+            self.fail("Did not receive a result from background IOR")
+        ior_result = thread_queue.get()
+        self.log.debug("Result from background IOR:")
+        for name in ("command", "exit_status", "interrupted", "duration"):
+            self.log.debug("  %s: %s", name, getattr(ior_result["result"], name))
+        for name in ("stdout", "stderr"):
+            self.log.debug("  %s:", name)
+            for line in getattr(ior_result["result"], name).splitlines():
+                self.log.debug("    %s:", line)
+        if ior_result["result"].exit_status != 0:
+            self.fail("Background IOR failed")
+        # TODO check IOR duration
+
         self.log_step("Setup second pool")
         pool2 = self.get_pool(connect=False)
 
         self.log_step('Create second container and run IOR')
-        cont2 = self.get_container(pool2, namespace='/run/cont_ior/*')
+        cont2 = self.get_container(pool2)
 
         job_manager = get_job_manager(self, subprocess=False)
         ior2 = get_ior(

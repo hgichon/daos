@@ -85,8 +85,9 @@ def run_ior(test, manager, log, hosts, path, slots, pool, container, processes, 
 
 
 def thread_run_ior(thread_queue, job_id, test, manager, log, hosts, path, slots,
-                   pool, container, processes, ppn, intercept, plugin_path, dfuse,
-                   display_space, fail_on_warning, namespace, ior_params):
+                   pool, container, processes, ppn=None, intercept=None, plugin_path=None,
+                   dfuse=None, display_space=True, fail_on_warning=False, namespace="/run/ior/*",
+                   ior_params=None):
     # pylint: disable=too-many-arguments
     """Start an IOR thread with thread queue for failure analysis.
 
