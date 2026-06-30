@@ -19,6 +19,9 @@ class RbldInteractive(TestWithServers):
     :avocado: recursive
     """
 
+    REBUILD_STOP_MAX_TRIES = 4
+    REBUILD_STOP_SLEEP = 3
+
     def test_rebuild_interactive(self):
         """
         Use Cases:
@@ -41,7 +44,7 @@ class RbldInteractive(TestWithServers):
             server_count, engines_per_host, targets_per_engine)
 
         self.log_step('Create container and run IOR')
-        cont1_ior = self.get_container(pool1, namespace='/run/cont_ior/*')
+        cont1 = self.get_container(pool1, namespace='/run/cont_ior/*')
         ior_flags_write = self.params.get('flags_write', '/run/ior/*')
         ior_flags_read = self.params.get('flags_read', '/run/ior/*')
         ior_ppn = self.params.get('ppn', '/run/ior/*')
@@ -50,8 +53,8 @@ class RbldInteractive(TestWithServers):
         ior1 = get_ior(
             self, job_manager, self.hostlist_clients, self.workdir, None, namespace='/run/ior/*')
         ior1.manager.job.update_params(
-            flags=ior_flags_write, dfs_oclass=cont1_ior.oclass.value,
-            dfs_pool=pool1.identifier, dfs_cont=cont1_ior.identifier)
+            flags=ior_flags_write, dfs_oclass=cont1.oclass.value,
+            dfs_pool=pool1.identifier, dfs_cont=cont1.identifier)
         ior1.run(ppn=ior_ppn, display_space=False)
 
         # Update ior with read flags for verification later
@@ -70,9 +73,6 @@ class RbldInteractive(TestWithServers):
 
         self.log_step('Create second container and run IOR')
         cont2 = self.get_container(pool2, namespace='/run/cont_ior/*')
-        ior_flags_write = self.params.get('flags_write', '/run/ior/*')
-        ior_flags_read = self.params.get('flags_read', '/run/ior/*')
-        ior_ppn = self.params.get('ppn', '/run/ior/*')
 
         job_manager = get_job_manager(self, subprocess=False)
         ior2 = get_ior(
@@ -126,7 +126,7 @@ class RbldInteractive(TestWithServers):
 
         ranks_to_exclude = self.random.sample(
             list(self.server_managers[0].ranks.keys()), k=num_ranks_to_exclude)
-        self.log_step(f'Exclude random rank {ranks_to_exclude}')
+        self.log_step(f'{exclude_method} - Exclude random rank {ranks_to_exclude}')
         if exclude_method == 'dmg pool exclude':
             for pool in pools:
                 pool.exclude(ranks_to_exclude)
@@ -140,8 +140,7 @@ class RbldInteractive(TestWithServers):
             pool.wait_for_rebuild_to_start(interval=1)
 
         self.log_step(f'{exclude_method} - Manually stop rebuild with {stop_method}')
-        max_tries = 3
-        for i in range(max_tries):
+        for i in range(self.REBUILD_STOP_MAX_TRIES):
             try:
                 if stop_method == 'dmg pool rebuild stop':
                     for pool in pools:
@@ -152,10 +151,12 @@ class RbldInteractive(TestWithServers):
                     self.fail(f'Unsupported stop_method: {stop_method}')
                 break
             except CommandFailure as error:
-                if not i < max_tries or 'DER_NONEXIST' not in str(error):
+                if not i < self.REBUILD_STOP_MAX_TRIES or 'DER_NONEXIST' not in str(error):
                     raise
-                self.log.info('Assuming rebuild is not started yet. Retrying in 3 seconds...')
-                time.sleep(3)
+                self.log.info(
+                    'Assuming rebuild is not started yet. Retrying in %s seconds...',
+                    self.REBUILD_STOP_SLEEP)
+                time.sleep(self.REBUILD_STOP_SLEEP)
 
         self.log_step(f'{exclude_method} - Wait for rebuild to stop')
         for pool in pools:
@@ -204,7 +205,7 @@ class RbldInteractive(TestWithServers):
             self.log_step(f'{exclude_method} - Start previously admin-excluded ranks')
             dmg.system_start(ranks_to_exclude)
 
-        self.log_step('Reintegrate excluded ranks')
+        self.log_step(f'{reint_method} - Reintegrate excluded ranks')
         if reint_method == 'dmg pool reintegrate':
             for pool in pools:
                 pool.reintegrate(ranks_to_exclude)
@@ -218,8 +219,7 @@ class RbldInteractive(TestWithServers):
             pool.wait_for_rebuild_to_start(interval=1)
 
         self.log_step(f'{reint_method} - Manually stop rebuild with {stop_method}')
-        max_tries = 3
-        for i in range(max_tries):
+        for i in range(self.REBUILD_STOP_MAX_TRIES):
             try:
                 if stop_method == 'dmg pool rebuild stop':
                     for pool in pools:
@@ -230,10 +230,12 @@ class RbldInteractive(TestWithServers):
                     self.fail(f'Unsupported stop_method: {stop_method}')
                 break
             except CommandFailure as error:
-                if not i < max_tries or 'DER_NONEXIST' not in str(error):
+                if not i < self.REBUILD_STOP_MAX_TRIES or 'DER_NONEXIST' not in str(error):
                     raise
-                self.log.info('Assuming rebuild is not started yet. Retrying in 3 seconds...')
-                time.sleep(3)
+                self.log.info(
+                    'Assuming rebuild is not started yet. Retrying in %s seconds...',
+                    self.REBUILD_STOP_SLEEP)
+                time.sleep(self.REBUILD_STOP_SLEEP)
 
         self.log_step(f'{reint_method} - Wait for rebuild to stop')
         for pool in pools:
