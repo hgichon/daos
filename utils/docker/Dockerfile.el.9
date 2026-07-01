@@ -32,23 +32,35 @@ ENV NO_PROXY=${DAOS_NO_PROXY}
 RUN echo "no_proxy=${DAOS_NO_PROXY}" >> /etc/environment && \
     echo "NO_PROXY=${DAOS_NO_PROXY}" >> /etc/environment
 
+ARG BASE_DISTRO
+ARG REPO_FILE_URL
+ARG JENKINS_URL
+ARG REPOS
+ARG DAOS_LAB_CA_FILE_URL
 # script to install OS updates basic tools and daos dependencies
 # script to setup local repo if available
-RUN --mount=type=bind,source=utils/scripts/helpers/repo-helper-el9.sh,target=/tmp/repo-helper.sh \
-    chmod +x /tmp/repo-helper.sh && \
-    /tmp/repo-helper.sh
+COPY ./utils/scripts/helpers/repo-helper-el9.sh /tmp/repo-helper.sh
+RUN chmod +x /tmp/repo-helper.sh && \
+    /tmp/repo-helper.sh && \
+    rm -f /tmp/repo-helper.sh
 
-FROM basic
 # Install OS updates and package.  Include basic tools and daos dependencies
-RUN --mount=type=bind,source=utils/scripts/install-el9.sh,target=/tmp/install.sh \
-    dnf upgrade &&        \
-    /tmp/install.sh &&    \
+RUN dnf upgrade &&        \
     dnf clean all
+    
+# Install OS updates and package.  Include basic tools and daos dependencies
+COPY ./utils/scripts/install-el9.sh /tmp/install.sh
+RUN chmod +x /tmp/install.sh && \
+    /tmp/install.sh && \
+    dnf clean all && \
+    rm -f /tmp/install.sh
 
 # Add DAOS users
 ARG UID=1000
-RUN --mount=type=bind,source=utils/scripts/helpers/daos-server-user-setup.sh,target=/tmp/daos-server-user-setup.sh \
-    /tmp/daos-server-user-setup.sh
+COPY ./utils/scripts/helpers/daos-server-user-setup.sh /tmp/daos-server-user-setup.sh
+RUN chmod +x /tmp/daos-server-user-setup.sh && \
+    /tmp/daos-server-user-setup.sh && \
+    rm -f /tmp/daos-server-user-setup.sh
 RUN useradd --no-log-init --user-group --create-home --shell /bin/bash daos_agent
 RUN echo "daos_agent:daos_agent" | chpasswd
 
@@ -65,10 +77,9 @@ ENV PATH=/home/daos/venv/bin:$PATH
 ENV VIRTUAL_ENV=/home/daos/venv/
 
 # Install latest versions of python tools.
-RUN --mount=type=bind,source=requirements-build.txt,target=/tmp/requirements-build.txt \
-    --mount=type=bind,source=requirements-utest.txt,target=/tmp/requirements-utest.txt \
-    python3 -m pip --no-cache-dir install --upgrade pip && \
-    python3 -m pip --no-cache-dir install -r /tmp/requirements-build.txt -r /tmp/requirements-utest.txt
+COPY requirements-build.txt requirements-utest.txt ./
+RUN python3 -m pip --no-cache-dir install --upgrade pip && \
+    python3 -m pip --no-cache-dir install -r requirements-build.txt
 
 WORKDIR /home/daos/pre
 RUN mkdir -p /home/daos/pre/site_scons/prereq_tools /home/daos/pre/site_scons/components
@@ -187,3 +198,7 @@ WORKDIR /home/daos
 ARG DAOS_KEEP_SRC=no
 # Remove local copy
 RUN [ "$DAOS_KEEP_SRC" != "no" ] || rm -rf /home/daos/daos /home/daos/pre
+
+FROM basic AS full
+COPY requirements-utest.txt /tmp/requirements-utest.txt
+RUN python3 -m pip --no-cache-dir install -r /tmp/requirements-utest.txt
