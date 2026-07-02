@@ -20,8 +20,6 @@ dnf --nodocs install ${dnf_install_args} \
     boost-python3-devel \
     bzip2 \
     capstone-devel \
-    clang \
-    clang-tools-extra \
     cmake \
     createrepo \
     CUnit-devel \
@@ -37,13 +35,10 @@ dnf --nodocs install ${dnf_install_args} \
     git \
     glibc-langpack-en \
     golang \
-    gperftools-devel \
-    graphviz \
     help2man \
     hdf5-devel \
     hwloc-devel \
     ipmctl \
-    java-1.8.0-openjdk \
     json-c-devel \
     libaio-devel \
     libasan \
@@ -85,6 +80,17 @@ dnf --nodocs install ${dnf_install_args} \
     which \
     ncurses-devel \
     yasm
+
+if [[ "${INSTALL_ONLY_ESSENTIAL:-}" != "true" ]]; then
+    # Optional packages for full-featured images; can be skipped in essential-only mode.
+    # shellcheck disable=SC2086
+    dnf --nodocs install ${dnf_install_args} \
+        clang \
+        clang-tools-extra \
+        gperftools-devel \
+        graphviz \
+        java-1.8.0-openjdk
+fi
 
 if [[ -z "${NO_OPENMPI_DEVEL+set}" ]]; then
     # shellcheck disable=SC2086

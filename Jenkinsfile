@@ -887,7 +887,7 @@ pipeline {
                     agent {
                         dockerfile {
                             filename 'utils/docker/Dockerfile.el.9'
-                            label 'docker_runner'
+                            label 'fox-119_docker_1'
                             additionalBuildArgs dockerBuildArgs(repo_type: 'stable',
                                                                 deps_build: false,
                                                                 parallel_build: true) +
@@ -896,7 +896,9 @@ pipeline {
                                                 ' --build-arg DAOS_KEEP_SRC=yes ' +
                                                 ' --build-arg REPOS="' + prRepos() + '"' +
                                                 ' --build-arg POINT_RELEASE=.7' +
-                                                " --build-arg PYTHON_VERSION=${env.PYTHON_VERSION}"
+                                                " --build-arg PYTHON_VERSION=${env.PYTHON_VERSION}" +
+                                                ' --target build-only' +
+                                                ' --build-arg INSTALL_ONLY_ESSENTIAL=true'
                         }
                     }
                     steps {

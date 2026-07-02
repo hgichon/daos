@@ -32,21 +32,24 @@ ENV NO_PROXY=${DAOS_NO_PROXY}
 RUN echo "no_proxy=${DAOS_NO_PROXY}" >> /etc/environment && \
     echo "NO_PROXY=${DAOS_NO_PROXY}" >> /etc/environment
 
-# script to install OS updates basic tools and daos dependencies
-COPY ./utils/scripts/install-el9.sh /tmp/install.sh
-# script to setup local repo if available
+# Script to setup local repo if available
 COPY ./utils/scripts/helpers/repo-helper-el9.sh /tmp/repo-helper.sh
 
-RUN chmod +x /tmp/repo-helper.sh /tmp/install.sh && \
-    /tmp/repo-helper.sh &&                          \
+# Script to install basic tools and daos dependencies
+COPY ./utils/scripts/install-el9.sh /tmp/install.sh
+
+RUN chmod +x /tmp/repo-helper.sh && \
+    /tmp/repo-helper.sh &&          \
     rm -f /tmp/repo-helper.sh
 
-FROM basic
+FROM basic AS build-only
+ARG INSTALL_ONLY_ESSENTIAL=false
+
 # Install OS updates and package.  Include basic tools and daos dependencies
-RUN dnf upgrade &&        \
-    /tmp/install.sh &&    \
-    dnf clean all &&      \
-    rm -f /tmp/install.sh
+RUN dnf upgrade &&                                                      \
+    chmod +x /tmp/install.sh &&                                         \
+    INSTALL_ONLY_ESSENTIAL="$INSTALL_ONLY_ESSENTIAL" /tmp/install.sh && \
+    dnf clean all
 
 # Add DAOS users
 ARG UID=1000
@@ -54,14 +57,12 @@ COPY ./utils/scripts/helpers/daos-server-user-setup.sh \
      /tmp/daos-server-user-setup.sh
 RUN set -e;                                    \
     chmod +x /tmp/daos-server-user-setup.sh && \
-    /tmp/daos-server-user-setup.sh
-RUN useradd --no-log-init --user-group --create-home --shell /bin/bash daos_agent
-RUN echo "daos_agent:daos_agent" | chpasswd
+    /tmp/daos-server-user-setup.sh && \
+    rm -f /tmp/daos-server-user-setup.sh
 
 # Create directory for DAOS backend storage
-RUN mkdir -p /opt/daos /mnt/daos /var/run/daos_server /var/run/daos_agent /home/daos/pre /home/daos/daos &&   \
-    chown -R daos_server.daos_server /opt/daos /mnt/daos /var/run/daos_server /home/daos &&  \
-    chown daos_agent.daos_agent /var/run/daos_agent
+RUN mkdir -p /opt/daos /home/daos/pre &&   \
+    chown -R daos_server.daos_server /opt/daos /home/daos
 
 USER daos_server:daos_server
 
@@ -72,10 +73,10 @@ ENV PATH=/home/daos/venv/bin:$PATH
 ENV VIRTUAL_ENV=/home/daos/venv/
 
 # Install latest versions of python tools.
-COPY requirements-build.txt requirements-utest.txt ./
+COPY requirements-build.txt ./
 RUN . /home/daos/venv/bin/activate && \
     pip --no-cache-dir install --upgrade pip && \
-    pip --no-cache-dir install -r requirements-build.txt -r requirements-utest.txt
+    pip --no-cache-dir install -r requirements-build.txt
 
 WORKDIR /home/daos/pre
 RUN mkdir -p /home/daos/pre/site_scons/prereq_tools /home/daos/pre/site_scons/components
@@ -86,6 +87,25 @@ COPY --chown=daos_server:daos_server site_scons/components site_scons/components
 COPY --chown=daos_server:daos_server utils/build.config utils/
 COPY --chown=daos_server:daos_server utils/scripts/copy_files.sh utils/scripts/copy_files.sh
 COPY --chown=daos_server:daos_server utils/scripts/create_spdk_pkgconfig.sh utils/scripts/create_spdk_pkgconfig.sh
+
+FROM build-only AS final
+USER root:root
+RUN /tmp/install.sh &&    \
+    dnf clean all &&      \
+    rm -f /tmp/install.sh
+
+# Add DAOS users
+RUN useradd --no-log-init --user-group --create-home --shell /bin/bash daos_agent
+RUN echo "daos_agent:daos_agent" | chpasswd
+
+# Create directory for DAOS backend storage
+RUN mkdir -p /mnt/daos /var/run/daos_server /var/run/daos_agent /home/daos/daos &&   \
+    chown -R daos_server.daos_server /mnt/daos /var/run/daos_server /home/daos &&  \
+    chown daos_agent.daos_agent /var/run/daos_agent
+
+USER daos_server:daos_server
+COPY requirements-utest.txt ./
+RUN pip --no-cache-dir install -r requirements-utest.txt
 
 # Control what to build.  By default Dockerfiles build everything to allow for
 # ease-of-use for users, however in CI everything is turned off and then
