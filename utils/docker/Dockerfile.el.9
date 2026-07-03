@@ -208,7 +208,7 @@ FROM build-local AS full
 RUN useradd --no-log-init --user-group --create-home --shell /bin/bash daos_agent
 RUN echo "daos_agent:daos_agent" | chpasswd
 
-# Create directory for DAOS runetime
+# Create directory for DAOS runtime
 RUN mkdir -p /mnt/daos /var/run/daos_server /var/run/daos_agent &&     \
     chown -R daos_server.daos_server /mnt/daos /var/run/daos_server && \
     chown -R daos_agent.daos_agent /var/run/daos_agent
