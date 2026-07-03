@@ -898,6 +898,7 @@ pipeline {
                                                 ' --build-arg POINT_RELEASE=.7' +
                                                 " --build-arg PYTHON_VERSION=${env.PYTHON_VERSION}" +
                                                 ' --target build-ci'
+                        }
                     }
                     steps {
                         script {

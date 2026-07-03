@@ -50,7 +50,7 @@ COPY ./utils/scripts/install-el9.sh /tmp/install.sh
 # Install basic tools and daos dependencies
 RUN dnf upgrade &&                                        \
     chmod +x /tmp/install.sh &&                           \
-    INSTALL_BULD_ESSENTIAL_ONLY="true" /tmp/install.sh && \
+    INSTALL_BUILD_ONLY="true" /tmp/install.sh && \
     dnf clean all
 
 # Add DAOS users
@@ -81,6 +81,13 @@ RUN . /home/daos/venv/bin/activate &&           \
     pip --no-cache-dir install -r requirements-build.txt
 
 FROM build-ci AS build-local
+# Install remaining tools and dependencies needed for builds.
+# This is done in a separate stage to allow for a smaller image for CI building only.
+USER root:root
+RUN /tmp/install.sh && \
+    dnf clean all &&   \
+    rm -f /tmp/install.sh
+
 # Control what to build.  By default Dockerfiles build everything to allow for
 # ease-of-use for users, however in CI everything is turned off and then
 # selectively enabled.  Turning off any step disables all future steps.
@@ -104,7 +111,6 @@ COPY --chown=daos_server:daos_server utils/scripts/create_spdk_pkgconfig.sh util
 # Now do an update to ensure software is up to date for the deps build.  If the
 # src hasn't changed then this won't do anything, but if it has then we want to
 # ensure that latest dependencies are used.
-USER root:root
 RUN [ "$DAOS_DEPS_BUILD" != "yes" ] || {                                               \
         dnf upgrade --exclude=spdk,spdk-devel,dpdk-devel,dpdk,mercury-devel,mercury && \
         dnf clean all;                                                                 \
@@ -198,13 +204,6 @@ ARG DAOS_KEEP_SRC=no
 RUN [ "$DAOS_KEEP_SRC" != "no" ] || rm -rf /home/daos/daos /home/daos/pre
 
 FROM build-local AS full
-# Install remaining tools and dependencies needed for testing.
-# This is done in a separate stage to allow for a smaller image for building only.
-USER root:root
-RUN /tmp/install.sh && \
-    dnf clean all &&   \
-    rm -f /tmp/install.sh
-
 # Add DAOS agent users
 RUN useradd --no-log-init --user-group --create-home --shell /bin/bash daos_agent
 RUN echo "daos_agent:daos_agent" | chpasswd

@@ -81,7 +81,7 @@ dnf --nodocs install ${dnf_install_args} \
     ncurses-devel \
     yasm
 
-if [[ "${INSTALL_BULD_ESSENTIAL_ONLY:-}" != "true" ]]; then
+if [[ "${INSTALL_BUILD_ESSENTIAL_ONLY:-}" != "true" ]]; then
     # Optional packages for full-featured images; can be skipped in essential-only mode.
     # shellcheck disable=SC2086
     dnf --nodocs install ${dnf_install_args} \
