@@ -108,6 +108,8 @@ COPY --chown=daos_server:daos_server utils/build.config utils/
 COPY --chown=daos_server:daos_server utils/scripts/copy_files.sh utils/scripts/copy_files.sh
 COPY --chown=daos_server:daos_server utils/scripts/create_spdk_pkgconfig.sh utils/scripts/create_spdk_pkgconfig.sh
 
+RUN chown -R daos_server.daos_server /home/daos 
+
 # Now do an update to ensure software is up to date for the deps build.  If the
 # src hasn't changed then this won't do anything, but if it has then we want to
 # ensure that latest dependencies are used.
