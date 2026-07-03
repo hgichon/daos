@@ -206,6 +206,7 @@ ARG DAOS_KEEP_SRC=no
 RUN [ "$DAOS_KEEP_SRC" != "no" ] || rm -rf /home/daos/daos /home/daos/pre
 
 FROM build-local AS full
+USER root:root
 # Add DAOS agent users
 RUN useradd --no-log-init --user-group --create-home --shell /bin/bash daos_agent
 RUN echo "daos_agent:daos_agent" | chpasswd
